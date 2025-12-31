@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 簡報生成器 (Reveal.js + Markdown)</title>
+    
+    <!-- Reveal.js CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css" id="theme">
+    
+    <!-- Tailwind CSS (用於 UI 介面) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Marked.js (用於解析 Markdown) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* --- 核心視覺系統 (CSS 變數化，支援換膚) --- */
+        :root {
+            /* 預設: Cyberpunk Blue */
+            --bg-gradient: linear-gradient(135deg, #0b1021, #1b2742, #101525);
+            --text-primary: #f0f2f5;
+            --neon-cyan: #00d2ff;
+            --neon-mint: #00ff9d;
+            --neon-pink: #ff4081;
+            --neon-orange: #ffab40;
+            --ui-blue: #448aff;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --nav-bg: rgba(255,255,255,0.1);
+        }
+
+        body { margin: 0; overflow: hidden; background: #0b1021; }
+
+        /* Reveal.js 自定義覆蓋 */
+        .reveal { background: var(--bg-gradient); color: var(--text-primary); transition: background 0.5s ease; }
+        .reveal h1, .reveal h2, .reveal h3, .reveal h4 {
+            font-family: "Microsoft YaHei", "Heiti TC", sans-serif;
+            font-weight: 700; text-transform: none; letter-spacing: 1px;
+        }
+        
+        .main-title {
+            background: linear-gradient(to right, var(--neon-cyan), var(--ui-blue));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            text-shadow: 0px 5px 15px rgba(0,0,0, 0.2);
+        }
+
+        .reveal p, .reveal li { font-family: "Microsoft JhengHei", sans-serif; line-height: 1.6; color: rgba(255,255,255,0.85); }
+        .small-text { font-size: 0.65em !important; color: rgba(255,255,255,0.6); }
+        .highlight { color: var(--neon-cyan); font-weight: bold; }
+
+        /* UI 覆蓋層樣式 (編輯器與按鈕) */
+        #ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 100;
+        }
+        
+        /* 浮動按鈕 */
+        .fab-btn {
+            pointer-events: auto;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+        }
+        .fab-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); }
+
+        /* 編輯器 Modal */
+        .glass-modal {
+            pointer-events: auto;
+            background: rgba(16, 21, 37, 0.95);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        
+        textarea {
+            background-color: #0f131a !important;
+            color: #ffffff !important;
+            font-family: 'Consolas', 'Monaco', monospace;
+            border: 1px solid rgba(255,255,255,0.2);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        textarea:focus { 
+            outline: none; 
+            border-color: var(--neon-cyan);
+            background-color: #000000 !important;
+        }
+
+        /* 導航提示：收合式設計 */
+        .nav-hint-container {
+            position: fixed; bottom: 30px; right: 30px; 
+            z-index: 50; display: flex; align-items: center; justify-content: flex-end;
+            pointer-events: auto;
+        }
+        
+        .nav-icon {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--nav-bg); color: rgba(255,255,255,0.7);
+            display: flex; align-items: center; justify-content: center;
+            border: 1px solid rgba(255,255,255,0.2);
+            transition: all 0.3s ease;
+            cursor: help;
+            font-size: 14px;
+        }
+
+        .nav-text {
+            max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
+            transition: all 0.4s ease;
+            margin-right: 10px;
+            background: rgba(0,0,0,0.6); padding: 0;
+            border-radius: 4px; color: #fff; font-size: 12px;
+            pointer-events: none;
+        }
+
+        /* Hover 時展開 */
+        .nav-hint-container:hover .nav-text {
+            max-width: 200px; opacity: 1; padding: 6px 12px;
+        }
+        .nav-hint-container:hover .nav-icon {
+            background: var(--ui-blue); color: #fff; border-color: var(--ui-blue);
+        }
+
+        /* 卷軸與 DropZone */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
+        .file-drop-zone {
+            border: 2px dashed rgba(255,255,255,0.2); transition: all 0.3s;
+        }
+        .file-drop-zone:hover {
+            border-color: var(--neon-cyan); background: rgba(0, 210, 255, 0.05);
+        }
+
+        /* 主題選擇器樣式 */
+        .theme-option {
+            cursor: pointer; border: 2px solid transparent; transition: all 0.2s;
+        }
+        .theme-option.active { border-color: #fff; transform: scale(1.1); }
+    </style>
+</head>
+<body>
+
+    <!-- 1. Reveal.js 容器 -->
+    <div class="reveal">
+        <!-- 導航提示 (收合式) -->
+        <div class="nav-hint-container">
+            <div class="nav-text">方向鍵 ↔ 換章節 ↕ 看細節</div>
+            <div class="nav-icon"><i class="fa-solid fa-question"></i></div>
+        </div>
+
+        <div class="slides" id="slides-container">
+            <!-- 內容動態生成 -->
+        </div>
+    </div>
+
+    <!-- 2. UI 互動層 -->
+    <div id="ui-layer" class="flex flex-col justify-end items-end p-6">
+        
+        <!-- 開啟編輯器按鈕 -->
+        <button onclick="toggleModal()" class="fab-btn w-14 h-14 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xl mb-12 shadow-lg hover:bg-cyan-500" title="編輯簡報">
+            <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+
+        <!-- 編輯器 Modal -->
+        <div id="editor-modal" class="hidden glass-modal absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-11/12 max-w-4xl rounded-xl p-6 flex flex-col h-[85vh]">
+            
+            <!-- 頂部標題與關閉 -->
+            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-xl font-bold text-cyan-400"><i class="fa-brands fa-markdown mr-2"></i>簡報生成器</h2>
+                    
+                    <!-- 主題選擇器 -->
+                    <div class="flex gap-2 ml-4">
+                        <div onclick="setTheme('cyberpunk')" class="theme-option w-6 h-6 rounded-full bg-blue-900 shadow-md active" title="Cyberpunk" data-theme="cyberpunk"></div>
+                        <div onclick="setTheme('sunset')" class="theme-option w-6 h-6 rounded-full bg-red-900 shadow-md" title="Velvet Sunset" data-theme="sunset"></div>
+                        <div onclick="setTheme('forest')" class="theme-option w-6 h-6 rounded-full bg-green-900 shadow-md" title="Nordic Forest" data-theme="forest"></div>
+                    </div>
+                </div>
+                <button onclick="toggleModal()" class="text-gray-400 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
+            </div>
+
+            <!-- 上傳區域 -->
+            <div class="mb-3">
+                <label class="file-drop-zone w-full block rounded-lg p-3 text-center cursor-pointer bg-opacity-10 bg-white hover:bg-opacity-20">
+                    <span class="text-gray-300 text-sm"><i class="fa-solid fa-cloud-upload-alt mr-2"></i>上傳 .md 檔案 或 貼上文字</span>
+                    <input type="file" id="fileInput" accept=".md,.txt" class="hidden" onchange="handleFileUpload(this)">
+                </label>
+            </div>
+
+            <!-- 文字編輯區 -->
+            <textarea id="md-input" class="flex-1 w-full rounded-lg p-4 resize-none text-sm leading-relaxed mb-4" placeholder="在此輸入 Markdown..."></textarea>
+
+            <!-- 底部按鈕區 -->
+            <div class="flex justify-between items-center">
+                <div class="text-xs text-gray-500">
+                    提示：使用 <code class="bg-gray-700 px-1 rounded text-white">---</code> 分隔水平頁面，使用 <code class="bg-gray-700 px-1 rounded text-white">###</code> 建立垂直子頁面。
+                </div>
+                <div class="flex gap-3">
+                    <button onclick="loadDefaultMarkdown()" class="text-gray-400 hover:text-white text-sm px-3 hover:bg-gray-700 rounded transition">
+                        <i class="fa-solid fa-rotate-left mr-1"></i> 載入制式範本
+                    </button>
+                    <button onclick="generateSlides()" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition transform active:scale-95">
+                        <i class="fa-solid fa-play mr-2"></i>生成
+                    </button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
+    <script>
+        // --- 1. 制式 Markdown 範本 (更新版) ---
+        const defaultMarkdown = `
+# 演示文稿封面
+### 這裡輸入副標題
+
+請在此處撰寫簡介或演講者名稱。
+
+---
+
+## 標題 1：主要章節
+* 這是第一個重點
+* 這是第二個重點
+* 這是第三個重點，條列式清晰明瞭
+
+### 標題 1.1：細節深入
+* 當您按下鍵盤 **↓ (向下鍵)** 時會看到此頁
+* 適合放置更詳細的數據或圖表說明
+
+### 標題 1.2：案例分析
+1. 步驟一
+2. 步驟二
+3. 這裡展示了垂直導航的第二層
+
+---
+
+## 標題 2：結論與展望
+* 總結報告內容
+* 提出未來的行動方針
+
+### 標題 2.1：Q&A
+* 開放提問時間
+* 謝謝聆聽
+        `.trim();
+
+        // 初始載入的 HTML
+        const initialHTML = `
+        <section>
+            <div style="margin-bottom: 20px;">
+                <span style="background: var(--ui-blue); padding: 6px 16px; border-radius: 4px; font-size: 0.6em; font-weight: 700; letter-spacing: 2px; color: #fff;">WELCOME</span>
+            </div>
+            <h1 class="main-title">AI 簡報生成器</h1>
+            <p>點擊右下角 <i class="fa-solid fa-pen-to-square"></i> 按鈕開始編輯</p>
+        </section>
+        `;
+
+        // --- 2. 主題設定 (Color Themes) ---
+        const themes = {
+            cyberpunk: {
+                '--bg-gradient': 'linear-gradient(135deg, #0b1021, #1b2742, #101525)',
+                '--text-primary': '#f0f2f5',
+                '--neon-cyan': '#00d2ff',
+                '--neon-mint': '#00ff9d',
+                '--neon-pink': '#ff4081',
+                '--neon-orange': '#ffab40',
+                '--ui-blue': '#448aff',
+                '--nav-bg': 'rgba(255,255,255,0.1)'
+            },
+            sunset: {
+                '--bg-gradient': 'linear-gradient(135deg, #2d0b15, #421b28, #1a080d)',
+                '--text-primary': '#ffe8e8',
+                '--neon-cyan': '#ffab40', /* Orange as primary accent */
+                '--neon-mint': '#ff4081',
+                '--neon-pink': '#d200ff',
+                '--neon-orange': '#ffd700',
+                '--ui-blue': '#ff5252',
+                '--nav-bg': 'rgba(255, 200, 200, 0.15)'
+            },
+            forest: {
+                '--bg-gradient': 'linear-gradient(135deg, #051a12, #0d3326, #02120b)',
+                '--text-primary': '#e8fff5',
+                '--neon-cyan': '#00ff9d', /* Green as primary accent */
+                '--neon-mint': '#aeff00',
+                '--neon-pink': '#00d2ff',
+                '--neon-orange': '#ffab40',
+                '--ui-blue': '#00b894',
+                '--nav-bg': 'rgba(200, 255, 200, 0.15)'
+            }
+        };
+
+        function setTheme(themeName) {
+            const root = document.documentElement;
+            const themeData = themes[themeName];
+            if (!themeData) return;
+
+            // 應用 CSS 變數
+            for (const [key, value] of Object.entries(themeData)) {
+                root.style.setProperty(key, value);
+            }
+
+            // 更新 UI 狀態
+            document.querySelectorAll('.theme-option').forEach(el => {
+                el.classList.remove('active');
+                if (el.dataset.theme === themeName) el.classList.add('active');
+            });
+        }
+
+        // --- 3. 初始化與邏輯 ---
+        let deck = null;
+
+        window.addEventListener('load', () => {
+            const container = document.getElementById('slides-container');
+            container.innerHTML = initialHTML;
+            // 預設載入範本內容到編輯器，但不生成，讓使用者看到空畫面引導
+            document.getElementById('md-input').value = defaultMarkdown; 
+            initReveal();
+        });
+
+        async function initReveal() {
+            if (deck) {
+                deck.destroy();
+                deck = null;
+            }
+            deck = new Reveal({
+                controls: true,
+                progress: true,
+                center: true,
+                hash: false,
+                transition: 'convex',
+                backgroundTransition: 'zoom'
+            });
+            return deck.initialize();
+        }
+
+        function toggleModal() {
+            const modal = document.getElementById('editor-modal');
+            if (modal.classList.contains('hidden')) {
+                modal.classList.remove('hidden');
+                document.getElementById('md-input').focus();
+            } else {
+                modal.classList.add('hidden');
+            }
+        }
+
+        function handleFileUpload(input) {
+            const file = input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('md-input').value = e.target.result;
+            };
+            reader.readAsText(file);
+        }
+
+        function loadDefaultMarkdown() {
+            document.getElementById('md-input').value = defaultMarkdown;
+        }
+
+        async function generateSlides() {
+            const rawMarkdown = document.getElementById('md-input').value;
+            if (!rawMarkdown.trim()) {
+                alert("請輸入 Markdown 內容");
+                return;
+            }
+
+            const tokens = marked.lexer(rawMarkdown);
+            
+            // 水平分頁邏輯
+            const horizontalSlidesTokens = [];
+            let currentSlideTokens = [];
+
+            tokens.forEach(token => {
+                if (token.type === 'hr') {
+                    if (currentSlideTokens.length > 0) {
+                        horizontalSlidesTokens.push(currentSlideTokens);
+                        currentSlideTokens = [];
+                    }
+                } else {
+                    currentSlideTokens.push(token);
+                }
+            });
+            if (currentSlideTokens.length > 0) horizontalSlidesTokens.push(currentSlideTokens);
+
+            let finalHTML = '';
+
+            // 垂直分頁與渲染邏輯
+            horizontalSlidesTokens.forEach(slideTokens => {
+                const hasH3 = slideTokens.some(t => t.type === 'heading' && t.depth === 3);
+
+                if (hasH3) {
+                    finalHTML += '<section>'; 
+                    let verticalChunks = [];
+                    let currentVerticalTokens = [];
+
+                    slideTokens.forEach(token => {
+                        if (token.type === 'heading' && token.depth === 3) {
+                            if (currentVerticalTokens.length > 0) verticalChunks.push(currentVerticalTokens);
+                            currentVerticalTokens = [token];
+                        } else {
+                            currentVerticalTokens.push(token);
+                        }
+                    });
+                    if (currentVerticalTokens.length > 0) verticalChunks.push(currentVerticalTokens);
+
+                    verticalChunks.forEach(chunkTokens => {
+                        chunkTokens.links = tokens.links; 
+                        let html = marked.parser(chunkTokens);
+                        html = applyStyles(html);
+                        finalHTML += `<section>${html}</section>`;
+                    });
+                    finalHTML += '</section>';
+                } else {
+                    slideTokens.links = tokens.links;
+                    let html = marked.parser(slideTokens);
+                    html = applyStyles(html);
+                    finalHTML += `<section>${html}</section>`;
+                }
+            });
+
+            document.getElementById('slides-container').innerHTML = finalHTML;
+            
+            await initReveal();
+            toggleModal();
+            deck.slide(0);
+        }
+
+        function applyStyles(html) {
+            // 自動套用當前主題的顏色變數
+            html = html.replace(/<h1/g, '<h1 class="main-title"');
+            html = html.replace(/<h2/g, '<h2 style="color: var(--neon-cyan);"');
+            html = html.replace(/<h3/g, '<h3 style="color: var(--neon-mint); margin-bottom: 30px;"');
+            html = html.replace(/<ul>/g, '<ul style="text-align: left; display: inline-block; font-size: 1.1em; margin-top: 10px;">');
+            html = html.replace(/<ol>/g, '<ol style="text-align: left; display: inline-block; font-size: 1.1em; margin-top: 10px;">');
+            return html;
+        }
+
+    </script>
+</body>
+</html>
