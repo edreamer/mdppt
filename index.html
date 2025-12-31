@@ -3,351 +3,502 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI 簡報生成器 (Reveal.js + Markdown)</title>
+    <title>MD簡報生成器</title>
     
     <!-- Reveal.js CSS -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css" id="theme">
     
-    <!-- Tailwind CSS (用於 UI 介面) -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Marked.js (用於解析 Markdown) -->
+    <!-- Marked.js -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
     <!-- FontAwesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* --- 核心視覺系統 (CSS 變數化，支援換膚) --- */
+        /* --- 核心視覺系統 --- */
         :root {
-            /* 預設: Cyberpunk Blue */
+            /* 預設: Cyberpunk */
             --bg-gradient: linear-gradient(135deg, #0b1021, #1b2742, #101525);
             --text-primary: #f0f2f5;
-            --neon-cyan: #00d2ff;
-            --neon-mint: #00ff9d;
-            --neon-pink: #ff4081;
-            --neon-orange: #ffab40;
-            --ui-blue: #448aff;
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --nav-bg: rgba(255,255,255,0.1);
+            --accent-color: #00d2ff;     /* 主要亮色 */
+            --secondary-color: #00ff9d;  /* 次要亮色 */
+            --ui-glass: rgba(16, 21, 37, 0.95);
+            --tool-bg: rgba(255, 255, 255, 0.1);
+            --tool-hover: #448aff;
         }
 
         body { margin: 0; overflow: hidden; background: #0b1021; }
 
-        /* Reveal.js 自定義覆蓋 */
-        .reveal { background: var(--bg-gradient); color: var(--text-primary); transition: background 0.5s ease; }
+        /* Reveal.js 樣式覆蓋 */
+        .reveal { background: var(--bg-gradient); color: var(--text-primary); transition: background 0.8s ease; }
+        
+        /* 1. 字體與標題設定 */
         .reveal h1, .reveal h2, .reveal h3, .reveal h4 {
             font-family: "Microsoft YaHei", "Heiti TC", sans-serif;
             font-weight: 700; text-transform: none; letter-spacing: 1px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
         
-        .main-title {
-            background: linear-gradient(to right, var(--neon-cyan), var(--ui-blue));
-            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
-            text-shadow: 0px 5px 15px rgba(0,0,0, 0.2);
-        }
-
-        .reveal p, .reveal li { font-family: "Microsoft JhengHei", sans-serif; line-height: 1.6; color: rgba(255,255,255,0.85); }
-        .small-text { font-size: 0.65em !important; color: rgba(255,255,255,0.6); }
-        .highlight { color: var(--neon-cyan); font-weight: bold; }
-
-        /* UI 覆蓋層樣式 (編輯器與按鈕) */
-        #ui-layer {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; z-index: 100;
+        /* H1 改為純色，移除漸層 */
+        .reveal h1 { 
+            color: var(--accent-color);
+            margin-bottom: 0.5em;
         }
         
-        /* 浮動按鈕 */
-        .fab-btn {
-            pointer-events: auto;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+        .reveal h2 { 
+            color: var(--accent-color) !important;
+            border-bottom: 3px solid rgba(255,255,255,0.1);
+            padding-bottom: 20px;
+            margin-bottom: 30px !important;
         }
-        .fab-btn:hover { transform: scale(1.1); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.6); }
+
+        .reveal h3 { 
+            color: var(--secondary-color) !important;
+            font-weight: 500;
+            opacity: 0.9;
+        }
+
+        .reveal p, .reveal li { 
+            font-family: "Microsoft JhengHei", sans-serif; 
+            line-height: 1.6; 
+            font-size: 1.1em;
+            color: rgba(255,255,255,0.9); 
+        }
+
+        /* Reveal.js 內建導航箭頭優化 */
+        .reveal .controls {
+            color: var(--accent-color) !important;
+        }
+        .reveal .controls button {
+            opacity: 0.5 !important;
+        }
+        .reveal .controls button.enabled {
+            opacity: 1 !important;
+        }
+        
+        /* --- 2. 新版右上角工具列 --- */
+        .smart-toolbar {
+            position: fixed;
+            top: 20px;   /* 右上角 */
+            right: 20px;
+            z-index: 2000;
+            display: flex;
+            flex-direction: column; 
+            align-items: center;
+            gap: 5px;
+            padding: 5px 0;
+            width: 44px;
+            height: 44px; /* 初始高度 */
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(5px);
+            border-radius: 22px;
+            border: 1px solid rgba(255,255,255,0.15);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+
+        /* Hover 展開 */
+        .smart-toolbar:hover {
+            height: 220px; /* 增加高度以容納下載按鈕 */
+            background: rgba(10, 15, 30, 0.8);
+            border-color: rgba(255,255,255,0.3);
+        }
+
+        /* 全螢幕時隱藏 */
+        .hide-toolbar {
+            display: none !important;
+        }
+
+        .tool-btn {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: transparent;
+            color: rgba(255,255,255,0.7);
+            cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s;
+            flex-shrink: 0;
+        }
+
+        .tool-btn:hover {
+            background: var(--tool-hover);
+            color: #fff;
+            transform: scale(1.1);
+        }
+        
+        /* 頂部選單圖示 */
+        .menu-icon {
+            color: var(--accent-color);
+            font-size: 18px;
+            margin-bottom: 2px;
+            display: flex; align-items: center; justify-content: center;
+            width: 100%; height: 34px;
+            flex-shrink: 0;
+        }
+
+        /* 工具提示 (Tooltip) */
+        .tool-btn::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            right: 50px; 
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+            white-space: nowrap;
+        }
+        .smart-toolbar:hover .tool-btn:hover::after {
+            opacity: 1;
+        }
+
+        /* 幫助訊息 Toast */
+        .help-toast {
+            position: fixed; top: 80px; right: 20px;
+            background: rgba(0,0,0,0.8);
+            border: 1px solid var(--accent-color);
+            color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            max-width: 250px;
+            z-index: 1900;
+            opacity: 0; pointer-events: none; transform: translateX(20px);
+            transition: all 0.3s;
+        }
+        .help-toast.show { opacity: 1; pointer-events: auto; transform: translateX(0); }
 
         /* 編輯器 Modal */
         .glass-modal {
-            pointer-events: auto;
-            background: rgba(16, 21, 37, 0.95);
+            background: var(--ui-glass);
             backdrop-filter: blur(16px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
         }
         
         textarea {
-            background-color: #0f131a !important;
-            color: #ffffff !important;
-            font-family: 'Consolas', 'Monaco', monospace;
-            border: 1px solid rgba(255,255,255,0.2);
-            font-size: 14px;
-            line-height: 1.6;
+            background-color: rgba(0,0,0,0.3) !important;
+            color: #e0e0e0 !important;
+            font-family: 'Consolas', monospace;
+            border: 1px solid rgba(255,255,255,0.1);
         }
-        textarea:focus { 
-            outline: none; 
-            border-color: var(--neon-cyan);
-            background-color: #000000 !important;
-        }
+        textarea:focus { border-color: var(--accent-color); }
 
-        /* 導航提示：收合式設計 */
-        .nav-hint-container {
-            position: fixed; bottom: 30px; right: 30px; 
-            z-index: 50; display: flex; align-items: center; justify-content: flex-end;
-            pointer-events: auto;
+        /* 主題選擇器網格 */
+        .theme-grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 5px;
         }
-        
-        .nav-icon {
-            width: 36px; height: 36px; border-radius: 50%;
-            background: var(--nav-bg); color: rgba(255,255,255,0.7);
-            display: flex; align-items: center; justify-content: center;
-            border: 1px solid rgba(255,255,255,0.2);
-            transition: all 0.3s ease;
-            cursor: help;
-            font-size: 14px;
-        }
-
-        .nav-text {
-            max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0;
-            transition: all 0.4s ease;
-            margin-right: 10px;
-            background: rgba(0,0,0,0.6); padding: 0;
-            border-radius: 4px; color: #fff; font-size: 12px;
-            pointer-events: none;
-        }
-
-        /* Hover 時展開 */
-        .nav-hint-container:hover .nav-text {
-            max-width: 200px; opacity: 1; padding: 6px 12px;
-        }
-        .nav-hint-container:hover .nav-icon {
-            background: var(--ui-blue); color: #fff; border-color: var(--ui-blue);
-        }
-
-        /* 卷軸與 DropZone */
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 4px; }
-        .file-drop-zone {
-            border: 2px dashed rgba(255,255,255,0.2); transition: all 0.3s;
-        }
-        .file-drop-zone:hover {
-            border-color: var(--neon-cyan); background: rgba(0, 210, 255, 0.05);
-        }
-
-        /* 主題選擇器樣式 */
         .theme-option {
-            cursor: pointer; border: 2px solid transparent; transition: all 0.2s;
+            width: 100%; aspect-ratio: 1;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: transform 0.2s;
+            position: relative;
         }
-        .theme-option.active { border-color: #fff; transform: scale(1.1); }
+        .theme-option:hover { transform: scale(1.1); }
+        .theme-option.active { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        
     </style>
 </head>
 <body>
 
-    <!-- 1. Reveal.js 容器 -->
+    <!-- Reveal.js 容器 -->
     <div class="reveal">
-        <!-- 導航提示 (收合式) -->
-        <div class="nav-hint-container">
-            <div class="nav-text">方向鍵 ↔ 換章節 ↕ 看細節</div>
-            <div class="nav-icon"><i class="fa-solid fa-question"></i></div>
-        </div>
-
         <div class="slides" id="slides-container">
             <!-- 內容動態生成 -->
         </div>
     </div>
 
-    <!-- 2. UI 互動層 -->
-    <div id="ui-layer" class="flex flex-col justify-end items-end p-6">
+    <!-- 2. 全新右上角工具列 (Smart Toolbar) -->
+    <div class="smart-toolbar" id="toolbar">
+        <!-- 選單圖示 -->
+        <div class="menu-icon">
+            <i class="fa-solid fa-bars"></i>
+        </div>
         
-        <!-- 開啟編輯器按鈕 -->
-        <button onclick="toggleModal()" class="fab-btn w-14 h-14 rounded-full bg-cyan-600 text-white flex items-center justify-center text-xl mb-12 shadow-lg hover:bg-cyan-500" title="編輯簡報">
-            <i class="fa-solid fa-pen-to-square"></i>
+        <!-- 展開後的按鈕 -->
+        <!-- 下載 (New) -->
+        <button class="tool-btn" onclick="downloadHTML()" data-tooltip="下載 html">
+            <i class="fa-solid fa-download"></i>
         </button>
 
-        <!-- 編輯器 Modal -->
-        <div id="editor-modal" class="hidden glass-modal absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-11/12 max-w-4xl rounded-xl p-6 flex flex-col h-[85vh]">
+        <!-- 編輯 -->
+        <button class="tool-btn" onclick="toggleModal()" data-tooltip="編輯簡報">
+            <i class="fa-solid fa-pen-to-square"></i>
+        </button>
+        
+        <!-- 全螢幕 -->
+        <button class="tool-btn" onclick="toggleFullScreen()" data-tooltip="全螢幕">
+            <i class="fa-solid fa-expand"></i>
+        </button>
+
+        <!-- 說明 -->
+        <button class="tool-btn" onclick="toggleHelp()" data-tooltip="說明">
+            <i class="fa-solid fa-question"></i>
+        </button>
+    </div>
+
+    <!-- 幫助訊息 -->
+    <div id="help-toast" class="help-toast">
+        <h4 class="text-cyan-400 font-bold mb-2">導航指引</h4>
+        <ul class="list-disc pl-4 space-y-1 text-gray-300">
+            <li><strong>左右鍵</strong>：切換章節</li>
+            <li><strong>上下鍵</strong>：查看細節</li>
+            <li><strong>F 鍵</strong>：全螢幕</li>
+            <li><strong>ESC</strong>：總覽模式</li>
+        </ul>
+    </div>
+
+    <!-- 編輯器 Modal -->
+    <div id="editor-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);">
+        <div class="glass-modal w-full max-w-5xl rounded-xl p-6 flex flex-col h-[90vh] shadow-2xl animate-fade-in-up">
             
-            <!-- 頂部標題與關閉 -->
-            <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-2">
-                <div class="flex items-center gap-4">
-                    <h2 class="text-xl font-bold text-cyan-400"><i class="fa-brands fa-markdown mr-2"></i>簡報生成器</h2>
-                    
-                    <!-- 主題選擇器 -->
-                    <div class="flex gap-2 ml-4">
-                        <div onclick="setTheme('cyberpunk')" class="theme-option w-6 h-6 rounded-full bg-blue-900 shadow-md active" title="Cyberpunk" data-theme="cyberpunk"></div>
-                        <div onclick="setTheme('sunset')" class="theme-option w-6 h-6 rounded-full bg-red-900 shadow-md" title="Velvet Sunset" data-theme="sunset"></div>
-                        <div onclick="setTheme('forest')" class="theme-option w-6 h-6 rounded-full bg-green-900 shadow-md" title="Nordic Forest" data-theme="forest"></div>
+            <!-- Header -->
+            <div class="flex justify-between items-start mb-4 border-b border-gray-700 pb-3">
+                <div>
+                    <h2 class="text-2xl font-bold text-white mb-1"><i class="fa-brands fa-markdown mr-2"></i>MD簡報生成器</h2>
+                    <p class="text-xs text-gray-400">貼上 Markdown 或上傳檔案，即時生成簡報。</p>
+                </div>
+                <button onclick="toggleModal()" class="text-gray-400 hover:text-white p-2"><i class="fa-solid fa-times text-2xl"></i></button>
+            </div>
+
+            <div class="flex gap-6 flex-1 overflow-hidden">
+                <!-- 左側：編輯區 -->
+                <div class="flex-1 flex flex-col">
+                    <!-- Toolbar -->
+                    <div class="flex justify-between mb-2">
+                        <label class="cursor-pointer bg-gray-800 hover:bg-gray-700 text-xs text-gray-300 px-3 py-1 rounded transition">
+                            <i class="fa-solid fa-upload mr-1"></i> 讀取檔案
+                            <input type="file" class="hidden" onchange="handleFileUpload(this)">
+                        </label>
+                        <button onclick="loadDefaultMarkdown()" class="text-xs text-gray-400 hover:text-white"><i class="fa-solid fa-rotate-left"></i> 載入範本</button>
                     </div>
+                    
+                    <textarea id="md-input" class="flex-1 w-full rounded-lg p-4 resize-none text-sm leading-relaxed focus:outline-none" placeholder="在此輸入 Markdown..."></textarea>
                 </div>
-                <button onclick="toggleModal()" class="text-gray-400 hover:text-white transition"><i class="fa-solid fa-times text-xl"></i></button>
-            </div>
 
-            <!-- 上傳區域 -->
-            <div class="mb-3">
-                <label class="file-drop-zone w-full block rounded-lg p-3 text-center cursor-pointer bg-opacity-10 bg-white hover:bg-opacity-20">
-                    <span class="text-gray-300 text-sm"><i class="fa-solid fa-cloud-upload-alt mr-2"></i>上傳 .md 檔案 或 貼上文字</span>
-                    <input type="file" id="fileInput" accept=".md,.txt" class="hidden" onchange="handleFileUpload(this)">
-                </label>
-            </div>
+                <!-- 右側：設定區 -->
+                <div class="w-64 flex flex-col gap-6 border-l border-gray-700 pl-6">
+                    
+                    <!-- 配色方案 -->
+                    <div>
+                        <h3 class="text-sm font-bold text-gray-300 mb-3 uppercase tracking-wider">配色風格</h3>
+                        <div class="theme-grid" id="theme-container">
+                            <!-- JS 動態生成 -->
+                        </div>
+                    </div>
 
-            <!-- 文字編輯區 -->
-            <textarea id="md-input" class="flex-1 w-full rounded-lg p-4 resize-none text-sm leading-relaxed mb-4" placeholder="在此輸入 Markdown..."></textarea>
-
-            <!-- 底部按鈕區 -->
-            <div class="flex justify-between items-center">
-                <div class="text-xs text-gray-500">
-                    提示：使用 <code class="bg-gray-700 px-1 rounded text-white">---</code> 分隔水平頁面，使用 <code class="bg-gray-700 px-1 rounded text-white">###</code> 建立垂直子頁面。
-                </div>
-                <div class="flex gap-3">
-                    <button onclick="loadDefaultMarkdown()" class="text-gray-400 hover:text-white text-sm px-3 hover:bg-gray-700 rounded transition">
-                        <i class="fa-solid fa-rotate-left mr-1"></i> 載入制式範本
-                    </button>
-                    <button onclick="generateSlides()" class="bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition transform active:scale-95">
-                        <i class="fa-solid fa-play mr-2"></i>生成
-                    </button>
+                    <!-- 生成按鈕 -->
+                    <div class="mt-auto">
+                        <button onclick="generateSlides()" class="w-full bg-gradient-to-r from-blue-600 to-cyan-500 hover:from-blue-500 hover:to-cyan-400 text-white py-3 rounded-lg font-bold shadow-lg transform active:scale-95 transition">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>生成簡報
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
-
     </div>
 
     <!-- Scripts -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.js"></script>
     <script>
-        // --- 1. 制式 Markdown 範本 (更新版) ---
+        // --- 1. 定義 10 種配色方案 ---
+        const themes = [
+            { id: 'cyberpunk', name: 'Cyberpunk', bg: 'linear-gradient(135deg, #0b1021, #1b2742)', accent: '#00d2ff', sec: '#00ff9d', color: '#0b1021' },
+            { id: 'sunset', name: 'Sunset', bg: 'linear-gradient(135deg, #2d0b15, #421b28)', accent: '#ffab40', sec: '#ff4081', color: '#421b28' },
+            { id: 'forest', name: 'Forest', bg: 'linear-gradient(135deg, #051a12, #0d3326)', accent: '#00ff9d', sec: '#aeff00', color: '#051a12' },
+            { id: 'ocean', name: 'Deep Ocean', bg: 'linear-gradient(135deg, #001e3c, #003366)', accent: '#00b4d8', sec: '#90e0ef', color: '#003366' },
+            { id: 'obsidian', name: 'Obsidian', bg: 'linear-gradient(135deg, #000000, #1a1a1a)', accent: '#ffffff', sec: '#808080', color: '#1a1a1a' },
+            { id: 'royal', name: 'Royal', bg: 'linear-gradient(135deg, #1a0b2e, #2d1b4e)', accent: '#ffd700', sec: '#d4af37', color: '#2d1b4e' },
+            { id: 'matrix', name: 'Matrix', bg: 'linear-gradient(135deg, #000000, #0a140a)', accent: '#00ff00', sec: '#008f11', color: '#000000' },
+            { id: 'lavender', name: 'Lavender', bg: 'linear-gradient(135deg, #1e1e2e, #2a2a40)', accent: '#cba6f7', sec: '#f5c2e7', color: '#2a2a40' },
+            { id: 'coffee', name: 'Espresso', bg: 'linear-gradient(135deg, #2b1b17, #3e2723)', accent: '#d7ccc8', sec: '#a1887f', color: '#3e2723' },
+            { id: 'crimson', name: 'Crimson', bg: 'linear-gradient(135deg, #2b0505, #4a0404)', accent: '#ff5252', sec: '#ff8a80', color: '#4a0404' }
+        ];
+
+        // 預設 Markdown
         const defaultMarkdown = `
-# 演示文稿封面
-### 這裡輸入副標題
-
-請在此處撰寫簡介或演講者名稱。
+# MD簡報生成器
+### 快速生成 • 鍵盤導航 • 即時預覽
 
 ---
 
-## 標題 1：主要章節
-* 這是第一個重點
-* 這是第二個重點
-* 這是第三個重點，條列式清晰明瞭
+## 1. 介面更新說明
+* **下載功能**：右上角新增下載按鈕，可將簡報存為 HTML
+* **簡約模式**：下載後的檔案只保留全螢幕按鈕
+* **MD簡報生成器**：品牌名稱已全面更新
 
-### 標題 1.1：細節深入
-* 當您按下鍵盤 **↓ (向下鍵)** 時會看到此頁
-* 適合放置更詳細的數據或圖表說明
-
-### 標題 1.2：案例分析
-1. 步驟一
-2. 步驟二
-3. 這裡展示了垂直導航的第二層
+### 1.1 垂直細節頁
+* 這是垂直向下的頁面
+* 按下 **↓ (下)** 鍵查看
+* 適合放置技術細節或圖表
 
 ---
 
-## 標題 2：結論與展望
-* 總結報告內容
-* 提出未來的行動方針
+## 2. 操作說明
+* 點擊右上角 **<i class="fa-solid fa-pen-to-square"></i>** 編輯內容
+* 點擊右上角 **<i class="fa-solid fa-download"></i>** 下載成單一檔案
+* 點擊右上角 **<i class="fa-solid fa-expand"></i>** 進入全螢幕
 
-### 標題 2.1：Q&A
-* 開放提問時間
-* 謝謝聆聽
+### 2.1 程式碼範例
+\`\`\`javascript
+// 下載功能核心邏輯
+function downloadHTML() {
+  const content = document.getElementById('md-input').value;
+  // 將目前的 Markdown 寫入到輸出的 HTML 中
+  // 並移除多餘的編輯按鈕...
+}
+\`\`\`
         `.trim();
 
-        // 初始載入的 HTML
-        const initialHTML = `
-        <section>
-            <div style="margin-bottom: 20px;">
-                <span style="background: var(--ui-blue); padding: 6px 16px; border-radius: 4px; font-size: 0.6em; font-weight: 700; letter-spacing: 2px; color: #fff;">WELCOME</span>
-            </div>
-            <h1 class="main-title">AI 簡報生成器</h1>
-            <p>點擊右下角 <i class="fa-solid fa-pen-to-square"></i> 按鈕開始編輯</p>
-        </section>
-        `;
-
-        // --- 2. 主題設定 (Color Themes) ---
-        const themes = {
-            cyberpunk: {
-                '--bg-gradient': 'linear-gradient(135deg, #0b1021, #1b2742, #101525)',
-                '--text-primary': '#f0f2f5',
-                '--neon-cyan': '#00d2ff',
-                '--neon-mint': '#00ff9d',
-                '--neon-pink': '#ff4081',
-                '--neon-orange': '#ffab40',
-                '--ui-blue': '#448aff',
-                '--nav-bg': 'rgba(255,255,255,0.1)'
-            },
-            sunset: {
-                '--bg-gradient': 'linear-gradient(135deg, #2d0b15, #421b28, #1a080d)',
-                '--text-primary': '#ffe8e8',
-                '--neon-cyan': '#ffab40', /* Orange as primary accent */
-                '--neon-mint': '#ff4081',
-                '--neon-pink': '#d200ff',
-                '--neon-orange': '#ffd700',
-                '--ui-blue': '#ff5252',
-                '--nav-bg': 'rgba(255, 200, 200, 0.15)'
-            },
-            forest: {
-                '--bg-gradient': 'linear-gradient(135deg, #051a12, #0d3326, #02120b)',
-                '--text-primary': '#e8fff5',
-                '--neon-cyan': '#00ff9d', /* Green as primary accent */
-                '--neon-mint': '#aeff00',
-                '--neon-pink': '#00d2ff',
-                '--neon-orange': '#ffab40',
-                '--ui-blue': '#00b894',
-                '--nav-bg': 'rgba(200, 255, 200, 0.15)'
-            }
-        };
-
-        function setTheme(themeName) {
-            const root = document.documentElement;
-            const themeData = themes[themeName];
-            if (!themeData) return;
-
-            // 應用 CSS 變數
-            for (const [key, value] of Object.entries(themeData)) {
-                root.style.setProperty(key, value);
-            }
-
-            // 更新 UI 狀態
-            document.querySelectorAll('.theme-option').forEach(el => {
-                el.classList.remove('active');
-                if (el.dataset.theme === themeName) el.classList.add('active');
-            });
-        }
-
-        // --- 3. 初始化與邏輯 ---
         let deck = null;
 
+        // 初始化
         window.addEventListener('load', () => {
-            const container = document.getElementById('slides-container');
-            container.innerHTML = initialHTML;
-            // 預設載入範本內容到編輯器，但不生成，讓使用者看到空畫面引導
+            renderThemeSelector();
             document.getElementById('md-input').value = defaultMarkdown; 
-            initReveal();
+            
+            // 監聽全螢幕變化，隱藏工具列
+            document.addEventListener("fullscreenchange", () => {
+                const toolbar = document.getElementById('toolbar');
+                if (document.fullscreenElement) {
+                    toolbar.classList.add('hide-toolbar');
+                } else {
+                    toolbar.classList.remove('hide-toolbar');
+                }
+            });
+
+            generateSlides();
         });
 
-        async function initReveal() {
-            if (deck) {
-                deck.destroy();
-                deck = null;
-            }
-            deck = new Reveal({
-                controls: true,
-                progress: true,
-                center: true,
-                hash: false,
-                transition: 'convex',
-                backgroundTransition: 'zoom'
+        // 渲染主題選擇器
+        function renderThemeSelector() {
+            const container = document.getElementById('theme-container');
+            let html = '';
+            themes.forEach(t => {
+                html += `
+                    <div onclick="setTheme('${t.id}')" 
+                         class="theme-option ${t.id === 'cyberpunk' ? 'active' : ''}" 
+                         data-theme="${t.id}"
+                         title="${t.name}"
+                         style="background: ${t.bg}; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.2);">
+                         <div style="position:absolute; bottom:0; right:0; width:50%; height:50%; background:${t.accent}; border-radius: 50% 0 50% 0; opacity:0.8;"></div>
+                    </div>
+                `;
             });
-            return deck.initialize();
+            container.innerHTML = html;
         }
 
+        // 設定主題
+        function setTheme(themeId) {
+            const t = themes.find(x => x.id === themeId);
+            if (!t) return;
+
+            const root = document.documentElement;
+            root.style.setProperty('--bg-gradient', t.bg);
+            root.style.setProperty('--accent-color', t.accent);
+            root.style.setProperty('--secondary-color', t.sec);
+            root.style.setProperty('--tool-hover', t.accent);
+
+            document.querySelectorAll('.theme-option').forEach(el => {
+                el.classList.toggle('active', el.dataset.theme === themeId);
+            });
+            
+            if (deck) deck.sync();
+        }
+
+        // Modal 控制
         function toggleModal() {
             const modal = document.getElementById('editor-modal');
-            if (modal.classList.contains('hidden')) {
-                modal.classList.remove('hidden');
+            modal.classList.toggle('hidden');
+            if (!modal.classList.contains('hidden')) {
                 document.getElementById('md-input').focus();
-            } else {
-                modal.classList.add('hidden');
             }
         }
 
+        // 全螢幕控制
+        function toggleFullScreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.warn("全螢幕請求被拒絕:", err);
+                    alert("瀏覽器或當前環境不支援全螢幕模式。");
+                });
+            } else if (document.exitFullscreen) {
+                document.exitFullscreen().catch(err => {
+                    console.warn("退出全螢幕失敗:", err);
+                });
+            }
+        }
+
+        // 說明 Toast
+        function toggleHelp() {
+            const toast = document.getElementById('help-toast');
+            toast.classList.toggle('show');
+            setTimeout(() => {
+                if(toast.classList.contains('show')) toast.classList.remove('show');
+            }, 5000); 
+        }
+
+        // 下載功能 (New)
+        function downloadHTML() {
+            const mdContent = document.getElementById('md-input').value;
+            let html = document.documentElement.outerHTML;
+
+            // 1. 更新預設 Markdown 內容，確保下載後開啟能顯示當前編輯的內容
+            // 需要跳脫字元避免破壞輸出的 JS 字串
+            const safeMd = mdContent
+                .replace(/\\/g, '\\\\')
+                .replace(/`/g, '\\`')
+                .replace(/\${/g, '\\${'); 
+            
+            // 使用 Regex 替換 const defaultMarkdown 的內容
+            html = html.replace(
+                /const defaultMarkdown = `[\s\S]*?`.trim\(\);/,
+                `const defaultMarkdown = \`${safeMd}\`.trim();`
+            );
+
+            // 2. 修改工具列：只保留全螢幕按鈕
+            // 我們使用 Regex 直接替換掉整個 toolbar div，比 DOMParser 更能保留原始格式
+            const newToolbarHTML = `
+    <div class="smart-toolbar" id="toolbar">
+        <div class="menu-icon"><i class="fa-solid fa-bars"></i></div>
+        <button class="tool-btn" onclick="toggleFullScreen()" data-tooltip="全螢幕">
+            <i class="fa-solid fa-expand"></i>
+        </button>
+    </div>`;
+            
+            html = html.replace(
+                /<div class="smart-toolbar" id="toolbar">[\s\S]*?<\/div>/, 
+                newToolbarHTML
+            );
+
+            // 3. 觸發下載
+            const blob = new Blob(["<!DOCTYPE html>\n" + html], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'mdppt.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        // 檔案上傳
         function handleFileUpload(input) {
             const file = input.files[0];
             if (!file) return;
@@ -362,84 +513,76 @@
             document.getElementById('md-input').value = defaultMarkdown;
         }
 
+        // 核心生成邏輯
         async function generateSlides() {
             const rawMarkdown = document.getElementById('md-input').value;
-            if (!rawMarkdown.trim()) {
-                alert("請輸入 Markdown 內容");
-                return;
-            }
-
             const tokens = marked.lexer(rawMarkdown);
             
-            // 水平分頁邏輯
-            const horizontalSlidesTokens = [];
-            let currentSlideTokens = [];
-
+            let htmlChunks = [];
+            let currentSlide = [];
+            
             tokens.forEach(token => {
                 if (token.type === 'hr') {
-                    if (currentSlideTokens.length > 0) {
-                        horizontalSlidesTokens.push(currentSlideTokens);
-                        currentSlideTokens = [];
-                    }
+                    if (currentSlide.length) htmlChunks.push(currentSlide);
+                    currentSlide = [];
                 } else {
-                    currentSlideTokens.push(token);
+                    currentSlide.push(token);
                 }
             });
-            if (currentSlideTokens.length > 0) horizontalSlidesTokens.push(currentSlideTokens);
+            if (currentSlide.length) htmlChunks.push(currentSlide);
 
             let finalHTML = '';
 
-            // 垂直分頁與渲染邏輯
-            horizontalSlidesTokens.forEach(slideTokens => {
-                const hasH3 = slideTokens.some(t => t.type === 'heading' && t.depth === 3);
-
-                if (hasH3) {
-                    finalHTML += '<section>'; 
-                    let verticalChunks = [];
-                    let currentVerticalTokens = [];
-
-                    slideTokens.forEach(token => {
+            htmlChunks.forEach(chunk => {
+                const hasSubSlides = chunk.some(t => t.type === 'heading' && t.depth === 3);
+                
+                if (hasSubSlides) {
+                    finalHTML += '<section>';
+                    let subSlides = [];
+                    let currentSub = [];
+                    
+                    chunk.forEach(token => {
                         if (token.type === 'heading' && token.depth === 3) {
-                            if (currentVerticalTokens.length > 0) verticalChunks.push(currentVerticalTokens);
-                            currentVerticalTokens = [token];
+                            if (currentSub.length) subSlides.push(currentSub);
+                            currentSub = [token];
                         } else {
-                            currentVerticalTokens.push(token);
+                            currentSub.push(token);
                         }
                     });
-                    if (currentVerticalTokens.length > 0) verticalChunks.push(currentVerticalTokens);
+                    if (currentSub.length) subSlides.push(currentSub);
 
-                    verticalChunks.forEach(chunkTokens => {
-                        chunkTokens.links = tokens.links; 
-                        let html = marked.parser(chunkTokens);
-                        html = applyStyles(html);
-                        finalHTML += `<section>${html}</section>`;
+                    subSlides.forEach(sub => {
+                        sub.links = tokens.links;
+                        finalHTML += `<section>${marked.parser(sub)}</section>`;
                     });
                     finalHTML += '</section>';
                 } else {
-                    slideTokens.links = tokens.links;
-                    let html = marked.parser(slideTokens);
-                    html = applyStyles(html);
-                    finalHTML += `<section>${html}</section>`;
+                    chunk.links = tokens.links;
+                    finalHTML += `<section>${marked.parser(chunk)}</section>`;
                 }
             });
 
             document.getElementById('slides-container').innerHTML = finalHTML;
-            
-            await initReveal();
-            toggleModal();
-            deck.slide(0);
-        }
 
-        function applyStyles(html) {
-            // 自動套用當前主題的顏色變數
-            html = html.replace(/<h1/g, '<h1 class="main-title"');
-            html = html.replace(/<h2/g, '<h2 style="color: var(--neon-cyan);"');
-            html = html.replace(/<h3/g, '<h3 style="color: var(--neon-mint); margin-bottom: 30px;"');
-            html = html.replace(/<ul>/g, '<ul style="text-align: left; display: inline-block; font-size: 1.1em; margin-top: 10px;">');
-            html = html.replace(/<ol>/g, '<ol style="text-align: left; display: inline-block; font-size: 1.1em; margin-top: 10px;">');
-            return html;
-        }
+            if (deck) {
+                deck.destroy();
+                deck = null;
+            }
+            deck = new Reveal({
+                controls: true,
+                progress: true,
+                center: true,
+                hash: false,
+                mouseWheel: true,
+                transition: 'convex',
+            });
+            deck.initialize();
 
+            const modal = document.getElementById('editor-modal');
+            if (!modal.classList.contains('hidden')) {
+                toggleModal();
+            }
+        }
     </script>
 </body>
 </html>
